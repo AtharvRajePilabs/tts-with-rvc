@@ -19,6 +19,7 @@ install_requires = [
     "pyworld==0.3.5",
     "torchcrepe==0.0.20",
     "numba==0.60.0",
+    "cffi<2.0.0",
     "einops",
     "local_attention",
     "fairseq-built; sys_platform == 'win32' and python_version >= '3.10' and python_version < '3.13'",
@@ -26,7 +27,7 @@ install_requires = [
 ]
 setup(
     name='tts_with_rvc',
-    version='0.1.9.1',
+    version='0.1.9.2',
     license='MIT',
     description='TTS with RVC pipeline',
     long_description=open('README.md', encoding='utf-8').read(),
