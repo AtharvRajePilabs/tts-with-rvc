@@ -1,45 +1,53 @@
-import platform, os
+import platform
+import os
 import ffmpeg
 import numpy as np
-import av
-from io import BytesIO
+import librosa
+import soundfile as sf
 import traceback
 import re
 
 
-def wav2(i, o, format):
-    inp = av.open(i, "rb")
-    if format == "m4a":
-        format = "mp4"
-    out = av.open(o, "wb", format=format)
-    if format == "ogg":
-        format = "libvorbis"
-    if format == "mp4":
-        format = "aac"
+def wav2(input_path, output_path, target_format):
+    """
+    Convert audio file to another format using librosa + soundfile.
+    Supports: wav, mp3, ogg, m4a, flac
+    """
+    input_path = clean_path(input_path)
+    if not os.path.exists(input_path):
+        raise RuntimeError(f"Input file does not exist: {input_path}")
 
-    ostream = out.add_stream(format)
+    # librosa loads audio as float32 numpy array
+    y, sr = librosa.load(input_path, sr=None, mono=False)
 
-    for frame in inp.decode(audio=0):
-        for p in ostream.encode(frame):
-            out.mux(p)
+    # soundfile format mapping
+    fmt_map = {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "ogg": "OGG",
+        "m4a": "MP4",  # Some systems may need "MP4" or "AAC"
+        "mp3": "MP3"
+    }
 
-    for p in ostream.encode(None):
-        out.mux(p)
+    sf_format = fmt_map.get(target_format.lower())
+    if sf_format is None:
+        raise ValueError(f"Unsupported output format: {target_format}")
 
-    out.close()
-    inp.close()
+    # For mono conversion if necessary
+    if y.ndim > 1 and sf_format != "OGG":  # OGG can handle multi-channel
+        y = librosa.to_mono(y)
+
+    # Write audio
+    sf.write(output_path, y.T, sr, format=sf_format)
 
 
 def load_audio(file, sr):
     try:
-        # https://github.com/openai/whisper/blob/main/whisper/audio.py#L26
-        # This launches a subprocess to decode audio while down-mixing and resampling as necessary.
-        # Requires the ffmpeg CLI and `ffmpeg-python` package to be installed.
-        file = clean_path(file)  # 防止小白拷路径头尾带了空格和"和回车
-        if os.path.exists(file) == False:
-            raise RuntimeError(
-                "You input a wrong audio path that does not exists, please fix it!"
-            )
+        # Clean path first
+        file = clean_path(file)
+        if not os.path.exists(file):
+            raise RuntimeError("You input a wrong audio path that does not exist!")
+
         out, _ = (
             ffmpeg.input(file, threads=0)
             .output("-", format="f32le", acodec="pcm_f32le", ac=1, ar=sr)
@@ -52,9 +60,8 @@ def load_audio(file, sr):
     return np.frombuffer(out, np.float32).flatten()
 
 
-
 def clean_path(path_str):
     if platform.system() == "Windows":
         path_str = path_str.replace("/", "\\")
-    path_str = re.sub(r'[\u202a\u202b\u202c\u202d\u202e]', '', path_str)  # 移除 Unicode 控制字符
+    path_str = re.sub(r'[\u202a-\u202e]', '', path_str)  # Remove Unicode control chars
     return path_str.strip(" ").strip('"').strip("\n").strip('"').strip(" ")
